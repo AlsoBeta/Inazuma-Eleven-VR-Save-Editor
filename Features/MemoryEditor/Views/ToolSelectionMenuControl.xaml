@@ -281,15 +281,28 @@
                                                Foreground="White"/>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="Store Item Multiplier x2457"
+                            <TextBlock Text="Store Item Multiplier"
                                      FontSize="16"
                                      FontWeight="Bold"
                                      Foreground="White"/>
-                            <TextBlock Text="Multiply items received from store purchases by 2457"
+                            <TextBlock Text="Multiply items (including hissatsus) received from store purchases"
                                      FontSize="11"
                                      Foreground="White"
                                      Opacity="0.9"
                                      Margin="0,3,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="Multiplier:"
+                                         FontSize="11"
+                                         Foreground="White"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                                <TextBox Width="80"
+                                         Height="32"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                         materialDesign:TextFieldAssist.HasClearButton="True"
+                                         Text="{Binding MemoryEditor.StoreItemMultiplier, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True, ValidatesOnExceptions=True}"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <ToggleButton Grid.Column="2"
@@ -299,6 +312,202 @@
                                      Command="{Binding MemoryEditor.ToggleStoreItemMultiplierCommand}"
                                      VerticalAlignment="Center"
                                      Margin="10,0,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- Inventory Hissatsu Amount Setter -->
+                <Border Background="#3F51B5"
+                       CornerRadius="8"
+                       Margin="0,10,0,0"
+                       Visibility="{Binding MemoryEditor.IsAttached, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid Margin="15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <materialDesign:PackIcon Grid.Column="0"
+                                               Kind="PlaylistEdit"
+                                               Width="28"
+                                               Height="28"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,15,0"
+                                               Foreground="White"/>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Inventory Hissatsu Amount"
+                                     FontSize="16"
+                                     FontWeight="Bold"
+                                     Foreground="White"/>
+                            <TextBlock Text="Directly edit the stack count for a hissatsu in your inventory"
+                                     FontSize="11"
+                                     Foreground="White"
+                                     Opacity="0.9"
+                                     Margin="0,3,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="Address (hex or dec):"
+                                         FontSize="11"
+                                         Foreground="White"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                                <TextBox Width="140"
+                                         Height="32"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                         materialDesign:TextFieldAssist.HasClearButton="True"
+                                         Text="{Binding MemoryEditor.InventoryHissatsuAddress, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="Desired amount:"
+                                         FontSize="11"
+                                         Foreground="White"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                                <TextBox Width="80"
+                                         Height="32"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                         materialDesign:TextFieldAssist.HasClearButton="True"
+                                         Text="{Binding MemoryEditor.InventoryHissatsuAmount, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True, ValidatesOnExceptions=True}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Command="{Binding MemoryEditor.ApplyInventoryHissatsuAmountCommand}"
+                                Style="{StaticResource MaterialDesignRaisedButton}"
+                                Height="45"
+                                VerticalAlignment="Center"
+                                Background="#283593"
+                                Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ContentSaveEdit"
+                                                       Width="20"
+                                                       Height="20"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,8,0"/>
+                                <TextBlock Text="Apply"
+                                         VerticalAlignment="Center"
+                                         FontWeight="Medium"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Hissatsu Inventory Browser -->
+                <Border Background="#1E88E5"
+                       CornerRadius="8"
+                       Margin="0,10,0,0"
+                       Visibility="{Binding MemoryEditor.IsAttached, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="FormatListNumbered"
+                                                       Width="28"
+                                                       Height="28"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,10,0"
+                                                       Foreground="White"/>
+                                <StackPanel>
+                                    <TextBlock Text="Hissatsu Inventory Browser"
+                                             FontSize="16"
+                                             FontWeight="Bold"
+                                             Foreground="White"/>
+                                    <TextBlock Text="Reads your current inventory slots and lets you edit the amounts"
+                                             FontSize="11"
+                                             Foreground="White"
+                                             Opacity="0.9"
+                                             Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Command="{Binding MemoryEditor.RefreshHissatsuInventoryCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="36"
+                                    VerticalAlignment="Center"
+                                    Background="#1565C0">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Refresh"
+                                                           Width="18"
+                                                           Height="18"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                    <TextBlock Text="Refresh"
+                                             VerticalAlignment="Center"
+                                             FontWeight="Medium"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <ListView Grid.Row="1"
+                                  Margin="0,10,0,10"
+                                  ItemsSource="{Binding MemoryEditor.HissatsuInventoryEntries}"
+                                  SelectedItem="{Binding MemoryEditor.SelectedHissatsuInventoryEntry, Mode=TwoWay}"
+                                  Height="230"
+                                  BorderThickness="0">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name}" Width="180" />
+                                    <GridViewColumn Header="Amount" Width="90">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBox Width="70"
+                                                         Padding="4,2"
+                                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                                         Text="{Binding Amount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="Address" DisplayMemberBinding="{Binding AddressDisplay}" Width="120" />
+                                    <GridViewColumn Header="Note" DisplayMemberBinding="{Binding Note}" Width="220" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Only slots with an amount greater than zero are shown. Names are matched from the catalog when possible."
+                                       FontSize="11"
+                                       Foreground="White"
+                                       Opacity="0.85"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,10,0"/>
+
+                            <Button Grid.Column="1"
+                                    Command="{Binding MemoryEditor.ApplySelectedInventoryHissatsuCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Height="40"
+                                    VerticalAlignment="Center"
+                                    Background="#0D47A1">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="ContentSaveEdit"
+                                                           Width="18"
+                                                           Height="18"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                    <TextBlock Text="Save Selected"
+                                             VerticalAlignment="Center"
+                                             FontWeight="Medium"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
                     </Grid>
                 </Border>
             </StackPanel>

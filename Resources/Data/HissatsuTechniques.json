@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Big Bang",
+    "address": "0x0225F920",
+    "note": "Shot hissatsu scroll"
+  },
+  {
+    "name": "Death Drop",
+    "address": "0x0225F924",
+    "note": "Shot hissatsu scroll"
+  },
+  {
+    "name": "God Hand",
+    "address": "0x0225F928",
+    "note": "Keeper hissatsu scroll"
+  },
+  {
+    "name": "Majin The Hand",
+    "address": "0x0225F92C",
+    "note": "Keeper hissatsu scroll"
+  },
+  {
+    "name": "Emperor Penguin 2",
+    "address": "0x0225F930",
+    "note": "Forward hissatsu scroll"
+  }
+]

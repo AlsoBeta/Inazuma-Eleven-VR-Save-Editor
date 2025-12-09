@@ -278,7 +278,64 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.Services
             }
         }
 
-        private bool InjectAtAddress(long hookOffset, int bytesToSkip, ref IntPtr codeCave)
+        public bool WriteAbsoluteInventoryValue(long absoluteAddress, int value)
+        {
+            if (!_isAttached || _processHandle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Not attached to process");
+            }
+
+            try
+            {
+                byte[] buffer = BitConverter.GetBytes(value);
+                IntPtr targetAddress = new IntPtr(absoluteAddress);
+
+                // Temporarily allow writing
+                uint oldProtect;
+                if (!VirtualProtectEx(_processHandle, targetAddress, (uint)buffer.Length, PAGE_EXECUTE_READWRITE, out oldProtect))
+                {
+                    return false;
+                }
+
+                bool success = WriteProcessMemory(_processHandle, targetAddress, buffer, buffer.Length, out _);
+
+                // Restore protection
+                VirtualProtectEx(_processHandle, targetAddress, (uint)buffer.Length, oldProtect, out _);
+
+                return success;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public int ReadAbsoluteInt32(long absoluteAddress)
+        {
+            if (!_isAttached || _processHandle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Not attached to process");
+            }
+
+            try
+            {
+                byte[] buffer = new byte[4];
+                IntPtr targetAddress = new IntPtr(absoluteAddress);
+
+                if (ReadProcessMemory(_processHandle, targetAddress, buffer, buffer.Length, out _))
+                {
+                    return BitConverter.ToInt32(buffer, 0);
+                }
+
+                return 0;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
+        }
+
+        private bool InjectAtAddress(long hookOffset, int bytesToSkip, ref IntPtr codeCave, int multiplier)
         {
             try
             {
@@ -330,11 +387,15 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.Services
                     throw new Exception($"Failed to allocate memory within ±2GB range of hook at nie.exe+{hookOffset:X}");
                 }
 
-                // Injected code: sub ecx,[rsi+10]; imul ecx,ecx,999; add ecx,[rsi+10]; mov [rsi+10],ecx; jmp back
+                // Injected code: sub ecx,[rsi+10]; imul ecx,ecx,<multiplier>; add ecx,[rsi+10]; mov [rsi+10],ecx; jmp back
                 byte[] injectedCode = new byte[20];
                 injectedCode[0] = 0x2B; injectedCode[1] = 0x4E; injectedCode[2] = 0x10;
-                injectedCode[3] = 0x69; injectedCode[4] = 0xC9; injectedCode[5] = 0x99;
-                injectedCode[6] = 0x09; injectedCode[7] = 0x00; injectedCode[8] = 0x00;
+                injectedCode[3] = 0x69; injectedCode[4] = 0xC9;
+                byte[] multiplierBytes = BitConverter.GetBytes(multiplier);
+                injectedCode[5] = multiplierBytes[0];
+                injectedCode[6] = multiplierBytes[1];
+                injectedCode[7] = multiplierBytes[2];
+                injectedCode[8] = multiplierBytes[3];
                 injectedCode[9] = 0x03; injectedCode[10] = 0x4E; injectedCode[11] = 0x10;
                 injectedCode[12] = 0x89; injectedCode[13] = 0x4E; injectedCode[14] = 0x10;
 
@@ -383,7 +444,7 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.Services
             }
         }
 
-        public bool InjectStoreItemMultiplier()
+        public bool InjectStoreItemMultiplier(int multiplier)
         {
             if (!_isAttached || _processHandle == IntPtr.Zero)
             {
@@ -392,10 +453,12 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.Services
 
             try
             {
+                multiplier = Math.Max(1, multiplier);
+
                 // Inject at all three item purchase locations (InjectAtAddress will throw detailed exceptions on failure)
-                InjectAtAddress(0x21EE85, 7, ref _storeItemMultiplierCodeCave1); // First - Hissatsus and Kenshins (return to 21EE8C)
-                InjectAtAddress(0x21DE45, 5, ref _storeItemMultiplierCodeCave2); // Second - Items unless boots and kizuna items (return to 21DE4A)
-                InjectAtAddress(0x21E185, 5, ref _storeItemMultiplierCodeCave3); // Third - Boots (return to 21E18A)
+                InjectAtAddress(0x21EE85, 7, ref _storeItemMultiplierCodeCave1, multiplier); // First - Hissatsus and Kenshins (return to 21EE8C)
+                InjectAtAddress(0x21DE45, 5, ref _storeItemMultiplierCodeCave2, multiplier); // Second - Items unless boots and kizuna items (return to 21DE4A)
+                InjectAtAddress(0x21E185, 5, ref _storeItemMultiplierCodeCave3, multiplier); // Third - Boots (return to 21E18A)
 
                 return true;
             }

@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -10,6 +13,7 @@ using InazumaElevenVRSaveEditor.Common.Infrastructure;
 using InazumaElevenVRSaveEditor.Features.MemoryEditor.Models;
 using InazumaElevenVRSaveEditor.Features.MemoryEditor.Services;
 using InazumaElevenVRSaveEditor.Features.MemoryEditor.Views;
+using System.Text.Json;
 
 namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
 {
@@ -28,6 +32,14 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
         private bool _isFlowersIncrementEnabled = false;
         private bool _isSpiritsFrozen = false;
         private bool _isStoreItemMultiplierEnabled = false;
+        private int _storeItemMultiplier = 2457;
+        private string _inventoryHissatsuAddress = "";
+        private int _inventoryHissatsuAmount = 9;
+        private ObservableCollection<HissatsuTechnique> _hissatsuTechniques = new();
+        private HissatsuTechnique? _selectedHissatsuTechnique;
+        private ObservableCollection<HissatsuInventoryEntry> _hissatsuInventoryEntries = new();
+        private HissatsuInventoryEntry? _selectedHissatsuInventoryEntry;
+        private readonly Dictionary<long, HissatsuTechnique> _hissatsuAddressLookup = new();
 
         // Individual maintenance flags for each card
         private bool _isStarsUnderMaintenance = true;
@@ -54,6 +66,44 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
 
         private static readonly byte[] ELITE_SPIRIT_ORIGINAL_BYTES = new byte[] { 0x66, 0x41, 0x89, 0x6C, 0x78, 0x10 };
         private static readonly byte[] ELITE_SPIRIT_FREEZE_BYTES = new byte[] { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+        private const long HISSATSU_INVENTORY_BASE_ADDRESS = 0x0225F920;
+        private const int HISSATSU_INVENTORY_SLOT_COUNT = 320;
+        private const int HISSATSU_SLOT_SIZE_BYTES = 4;
+
+        private static readonly List<HissatsuTechnique> DefaultHissatsuCatalog = new List<HissatsuTechnique>
+        {
+            new HissatsuTechnique
+            {
+                Name = "Big Bang",
+                Address = "0x0225F920",
+                Note = "Shot hissatsu scroll"
+            },
+            new HissatsuTechnique
+            {
+                Name = "Death Drop",
+                Address = "0x0225F924",
+                Note = "Shot hissatsu scroll"
+            },
+            new HissatsuTechnique
+            {
+                Name = "God Hand",
+                Address = "0x0225F928",
+                Note = "Keeper hissatsu scroll"
+            },
+            new HissatsuTechnique
+            {
+                Name = "Majin The Hand",
+                Address = "0x0225F92C",
+                Note = "Keeper hissatsu scroll"
+            },
+            new HissatsuTechnique
+            {
+                Name = "Emperor Penguin 2",
+                Address = "0x0225F930",
+                Note = "Forward hissatsu scroll"
+            }
+        };
 
         public MemoryEditorViewModel()
         {
@@ -136,6 +186,10 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
             AddSpiritsCommand = new RelayCommand(AddSpiritsValue, CanAddSpirits);
             AddBeansCommand = new RelayCommand(AddBeansValue, CanAddBeans);
             OpenItemListCommand = new RelayCommand(OpenItemListWindow);
+            ApplyInventoryHissatsuAmountCommand = new RelayCommand(ApplyInventoryHissatsuAmount, CanApplyInventoryHissatsuAmount);
+            UseSelectedHissatsuAddressCommand = new RelayCommand(ApplySelectedHissatsuAddress, CanApplySelectedHissatsuAddress);
+            RefreshHissatsuInventoryCommand = new RelayCommand(RefreshHissatsuInventory, CanRefreshValues);
+            ApplySelectedInventoryHissatsuCommand = new RelayCommand(ApplySelectedInventoryHissatsuAmount, CanApplySelectedInventoryHissatsuAmount);
 
             MemoryValues = new ObservableCollection<MemoryValue>
             {
@@ -267,6 +321,8 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
                 }
             };
 
+            LoadHissatsuTechniques();
+
             _updateTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1)
@@ -351,6 +407,9 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
                 ((RelayCommand)ToggleFlowersIncrementCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ToggleSpiritsFreezeCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ToggleStoreItemMultiplierCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)UseSelectedHissatsuAddressCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RefreshHissatsuInventoryCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ApplySelectedInventoryHissatsuCommand).RaiseCanExecuteChanged();
             }
         }
 
@@ -410,6 +469,10 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
         public ICommand AddSpiritsCommand { get; }
         public ICommand AddBeansCommand { get; }
         public ICommand OpenItemListCommand { get; }
+        public ICommand ApplyInventoryHissatsuAmountCommand { get; }
+        public ICommand UseSelectedHissatsuAddressCommand { get; }
+        public ICommand RefreshHissatsuInventoryCommand { get; }
+        public ICommand ApplySelectedInventoryHissatsuCommand { get; }
 
         public bool IsStarsFrozen
         {
@@ -452,6 +515,88 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
                 _isStoreItemMultiplierEnabled = value;
                 OnPropertyChanged();
                 ((RelayCommand)ToggleStoreItemMultiplierCommand).RaiseCanExecuteChanged();
+            }
+        }
+
+        public int StoreItemMultiplier
+        {
+            get => _storeItemMultiplier;
+            set
+            {
+                int clampedValue = Math.Max(1, Math.Min(value, 1_000_000));
+
+                if (_storeItemMultiplier != clampedValue)
+                {
+                    _storeItemMultiplier = clampedValue;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string InventoryHissatsuAddress
+        {
+            get => _inventoryHissatsuAddress;
+            set
+            {
+                _inventoryHissatsuAddress = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int InventoryHissatsuAmount
+        {
+            get => _inventoryHissatsuAmount;
+            set
+            {
+                int clampedValue = Math.Max(1, Math.Min(value, 9999));
+
+                if (_inventoryHissatsuAmount != clampedValue)
+                {
+                    _inventoryHissatsuAmount = clampedValue;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public ObservableCollection<HissatsuTechnique> HissatsuTechniques
+        {
+            get => _hissatsuTechniques;
+            private set
+            {
+                _hissatsuTechniques = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ObservableCollection<HissatsuInventoryEntry> HissatsuInventoryEntries
+        {
+            get => _hissatsuInventoryEntries;
+            private set
+            {
+                _hissatsuInventoryEntries = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public HissatsuTechnique? SelectedHissatsuTechnique
+        {
+            get => _selectedHissatsuTechnique;
+            set
+            {
+                _selectedHissatsuTechnique = value;
+                OnPropertyChanged();
+                ((RelayCommand)UseSelectedHissatsuAddressCommand).RaiseCanExecuteChanged();
+            }
+        }
+
+        public HissatsuInventoryEntry? SelectedHissatsuInventoryEntry
+        {
+            get => _selectedHissatsuInventoryEntry;
+            set
+            {
+                _selectedHissatsuInventoryEntry = value;
+                OnPropertyChanged();
+                ((RelayCommand)ApplySelectedInventoryHissatsuCommand).RaiseCanExecuteChanged();
             }
         }
 
@@ -622,6 +767,8 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
                         memValue.NewValue = value;
                     }
                 }
+
+                RefreshHissatsuInventory(null);
 
                 if (!StatusMessage.Contains("cached value"))
                 {
@@ -989,12 +1136,23 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
 
                 if (!IsStoreItemMultiplierEnabled)
                 {
-                    success = _memoryService.InjectStoreItemMultiplier();
+                    if (StoreItemMultiplier < 1)
+                    {
+                        StatusMessage = "Please enter a multiplier of at least 1";
+                        MessageBox.Show(
+                            "Enter a multiplier of at least 1 before enabling the store item multiplier.",
+                            "Invalid Multiplier",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    success = _memoryService.InjectStoreItemMultiplier(StoreItemMultiplier);
 
                     if (success)
                     {
                         IsStoreItemMultiplierEnabled = true;
-                        StatusMessage = "Store item multiplier enabled - items will be multiplied by 2457 when purchased!";
+                        StatusMessage = $"Store item multiplier enabled - store items (including hissatsus) will be multiplied by x{StoreItemMultiplier}!";
                     }
                     else
                     {
@@ -1035,6 +1193,114 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
                     "Error",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+            }
+        }
+
+        private bool CanApplyInventoryHissatsuAmount(object? parameter)
+        {
+            return IsAttached;
+        }
+
+        private void ApplyInventoryHissatsuAmount(object? parameter)
+        {
+            if (!IsAttached)
+                return;
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(InventoryHissatsuAddress))
+                {
+                    StatusMessage = "Enter the inventory address for the hissatsu you want to edit";
+                    MessageBox.Show(
+                        "Enter the absolute inventory address (hex or decimal) for the hissatsu you want to edit.",
+                        "Invalid Address",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                if (!TryParseAddressString(InventoryHissatsuAddress, out long absoluteAddress))
+                {
+                    StatusMessage = "Could not parse the hissatsu inventory address";
+                    MessageBox.Show(
+                        "The hissatsu address must be a valid positive number (hex like 0x1234 or decimal).",
+                        "Address Parsing Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                bool success = _memoryService.WriteAbsoluteInventoryValue(absoluteAddress, InventoryHissatsuAmount);
+
+                if (success)
+                {
+                    StatusMessage = $"Set hissatsu inventory at 0x{absoluteAddress:X} to {InventoryHissatsuAmount}";
+                }
+                else
+                {
+                    StatusMessage = "Failed to update hissatsu inventory amount";
+                    MessageBox.Show(
+                        "Failed to write the hissatsu inventory value. Make sure the game is running and you are attached to the process.",
+                        "Write Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error updating hissatsu inventory: {ex.Message}";
+                MessageBox.Show(
+                    $"Error occurred while writing the hissatsu inventory amount:\n\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private bool CanApplySelectedHissatsuAddress(object? parameter)
+        {
+            return IsAttached && SelectedHissatsuTechnique != null;
+        }
+
+        private void ApplySelectedHissatsuAddress(object? parameter)
+        {
+            if (SelectedHissatsuTechnique == null)
+            {
+                return;
+            }
+
+            InventoryHissatsuAddress = SelectedHissatsuTechnique.Address;
+            StatusMessage = $"Loaded address for {SelectedHissatsuTechnique.Name}";
+        }
+
+        private bool CanApplySelectedInventoryHissatsuAmount(object? parameter)
+        {
+            return IsAttached && SelectedHissatsuInventoryEntry != null;
+        }
+
+        private void ApplySelectedInventoryHissatsuAmount(object? parameter)
+        {
+            if (!IsAttached || SelectedHissatsuInventoryEntry == null)
+            {
+                return;
+            }
+
+            try
+            {
+                bool success = _memoryService.WriteAbsoluteInventoryValue(SelectedHissatsuInventoryEntry.Address, SelectedHissatsuInventoryEntry.Amount);
+
+                if (success)
+                {
+                    StatusMessage = $"Updated {SelectedHissatsuInventoryEntry.Name} to {SelectedHissatsuInventoryEntry.Amount}";
+                }
+                else
+                {
+                    StatusMessage = "Failed to update hissatsu inventory entry";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error updating hissatsu inventory entry: {ex.Message}";
             }
         }
 
@@ -1116,6 +1382,141 @@ namespace InazumaElevenVRSaveEditor.Features.MemoryEditor.ViewModels
             {
                 StatusMessage = $"Error adding to bean value: {ex.Message}";
             }
+        }
+
+        private void LoadHissatsuTechniques()
+        {
+            try
+            {
+                string catalogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Data", "HissatsuTechniques.json");
+
+                List<HissatsuTechnique> catalog = new(DefaultHissatsuCatalog);
+
+                if (File.Exists(catalogPath))
+                {
+                    string json = File.ReadAllText(catalogPath);
+                    var parsed = JsonSerializer.Deserialize<List<HissatsuTechnique>>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    if (parsed != null && parsed.Count > 0)
+                    {
+                        catalog = parsed;
+                    }
+                }
+
+                HissatsuTechniques = new ObservableCollection<HissatsuTechnique>(catalog.OrderBy(h => h.Name));
+
+                RebuildHissatsuAddressLookup();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to load hissatsu list: {ex.Message}";
+                HissatsuTechniques = new ObservableCollection<HissatsuTechnique>(DefaultHissatsuCatalog);
+
+                RebuildHissatsuAddressLookup();
+            }
+        }
+
+        private void RebuildHissatsuAddressLookup()
+        {
+            _hissatsuAddressLookup.Clear();
+
+            foreach (var technique in HissatsuTechniques)
+            {
+                if (TryParseAddressString(technique.Address, out long absoluteAddress) && !_hissatsuAddressLookup.ContainsKey(absoluteAddress))
+                {
+                    _hissatsuAddressLookup.Add(absoluteAddress, technique);
+                }
+            }
+
+            ((RelayCommand)ApplySelectedInventoryHissatsuCommand).RaiseCanExecuteChanged();
+        }
+
+        private void RefreshHissatsuInventory(object? parameter)
+        {
+            if (!IsAttached)
+            {
+                return;
+            }
+
+            try
+            {
+                List<HissatsuInventoryEntry> detectedEntries = new();
+
+                for (int slot = 0; slot < HISSATSU_INVENTORY_SLOT_COUNT; slot++)
+                {
+                    long address = HISSATSU_INVENTORY_BASE_ADDRESS + (slot * HISSATSU_SLOT_SIZE_BYTES);
+                    int amount = _memoryService.ReadAbsoluteInt32(address);
+
+                    if (amount <= 0)
+                    {
+                        continue;
+                    }
+
+                    string name = ResolveHissatsuName(address, out string? note);
+
+                    detectedEntries.Add(new HissatsuInventoryEntry
+                    {
+                        Address = address,
+                        Amount = amount,
+                        Name = name,
+                        Note = note
+                    });
+                }
+
+                HissatsuInventoryEntries = new ObservableCollection<HissatsuInventoryEntry>(detectedEntries.OrderByDescending(h => h.Amount).ThenBy(h => h.Name));
+
+                if (!HissatsuInventoryEntries.Contains(SelectedHissatsuInventoryEntry))
+                {
+                    SelectedHissatsuInventoryEntry = HissatsuInventoryEntries.FirstOrDefault();
+                }
+
+                ((RelayCommand)ApplySelectedInventoryHissatsuCommand).RaiseCanExecuteChanged();
+
+                StatusMessage = $"Found {HissatsuInventoryEntries.Count} hissatsus in inventory at {DateTime.Now:HH:mm:ss}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to read hissatsu inventory: {ex.Message}";
+            }
+        }
+
+        private string ResolveHissatsuName(long address, out string? note)
+        {
+            note = null;
+
+            if (_hissatsuAddressLookup.TryGetValue(address, out var known))
+            {
+                note = known.Note;
+                return known.Name;
+            }
+
+            return $"Hissatsu @0x{address:X}";
+        }
+
+        private bool TryParseAddressString(string? rawAddress, out long absoluteAddress)
+        {
+            absoluteAddress = 0;
+
+            if (string.IsNullOrWhiteSpace(rawAddress))
+            {
+                return false;
+            }
+
+            string trimmedAddress = rawAddress.Trim();
+            bool isHex = trimmedAddress.StartsWith("0x", StringComparison.OrdinalIgnoreCase);
+            string addressDigits = isHex ? trimmedAddress.Substring(2) : trimmedAddress;
+
+            if (long.TryParse(addressDigits, isHex ? NumberStyles.HexNumber : NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed)
+                && parsed > 0)
+            {
+                absoluteAddress = parsed;
+                return true;
+            }
+
+            return false;
         }
 
         private void OpenItemListWindow(object? parameter)

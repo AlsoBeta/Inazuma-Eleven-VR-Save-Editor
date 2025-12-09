@@ -32,6 +32,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Resources\Data\HissatsuTechniques.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Resources\Spirits\Harper Evans Breach.png" />
     <Resource Include="Resources\Spirits\Hector Helio Justice.png" />
     <Resource Include="Resources\Cards\Spirits.png" />
